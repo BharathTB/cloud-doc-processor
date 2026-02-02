@@ -4,15 +4,26 @@ from rest_framework import status
 
 from .models import Document
 from .serializers import DocumentUploadSerializer
+from documents.services.processor import process_document
+
 
 @api_view(['GET'])
 def health(request):
+    """
+    Health check endpoint to verify the service is running.
+    """
     return Response({"status": "UP"})
+
 
 @api_view(['POST'])
 def upload_document(request):
+    """
+    Uploads a document, saves metadata, and triggers simulated processing.
+    """
+
     uploaded_file = request.FILES.get('file')
 
+    # Check if file is present
     if not uploaded_file:
         return Response(
             {"error": "No file provided"},
@@ -38,6 +49,7 @@ def upload_document(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # Create document record
     document = Document.objects.create(
         file=uploaded_file,
         filename=uploaded_file.name,
@@ -45,6 +57,10 @@ def upload_document(request):
         status='UPLOADED'
     )
 
+    # 🔥 Trigger simulated background processing
+    process_document(document.id)
+    document.refresh_from_db()
+    # Serialize response
     serializer = DocumentUploadSerializer(document)
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
