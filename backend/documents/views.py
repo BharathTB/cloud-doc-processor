@@ -2,6 +2,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 
+from django.shortcuts import get_object_or_404
+
 from .models import Document
 from .serializers import DocumentUploadSerializer
 from documents.services.processor import process_document
@@ -18,12 +20,13 @@ def health(request):
 @api_view(['POST'])
 def upload_document(request):
     """
-    Uploads a document, saves metadata, and triggers simulated processing.
+    Uploads a document and stores metadata.
+    DOES NOT trigger processing (Day 4 design change).
     """
 
     uploaded_file = request.FILES.get('file')
 
-    # Check if file is present
+    # Validate file presence
     if not uploaded_file:
         return Response(
             {"error": "No file provided"},
@@ -49,7 +52,7 @@ def upload_document(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Create document record
+    # Create document record (UPLOAD ONLY)
     document = Document.objects.create(
         file=uploaded_file,
         filename=uploaded_file.name,
@@ -57,10 +60,58 @@ def upload_document(request):
         status='UPLOADED'
     )
 
-    # 🔥 Trigger simulated background processing
-    process_document(document.id)
-    document.refresh_from_db()
-    # Serialize response
     serializer = DocumentUploadSerializer(document)
 
     return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+def process_document_view(request, document_id):
+    """
+    Triggers processing for an uploaded document.
+    """
+
+    # Fetch document safely
+    document = get_object_or_404(Document, id=document_id)
+
+    # Guard against duplicate or invalid processing
+    if document.status in ['PROCESSING', 'PROCESSED']:
+        return Response(
+            {
+                "id": document.id,
+                "status": document.status
+            },
+            status=status.HTTP_200_OK
+        )
+
+    # Document is in UPLOADED state → trigger processing
+    document.status = 'PROCESSING'
+    document.save()
+
+    process_document(document.id)
+
+    # Refresh to get final state after processing
+    document.refresh_from_db()
+
+    return Response(
+        {
+            "id": document.id,
+            "status": document.status
+        },
+        status=status.HTTP_200_OK
+    )
+
+@api_view(['GET'])
+def document_status_view(request, document_id):
+    """
+    Returns the current status of a document.
+    """
+    document = get_object_or_404(Document, id=document_id)
+
+    return Response(
+        {
+            "id": document.id,
+            "status": document.status
+        },
+        status=status.HTTP_200_OK
+    )
