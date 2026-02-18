@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-doc-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud-doc-processor
+  template:
+    metadata:
+      labels:
+        app: cloud-doc-processor
+    spec:
+      containers:
+      - name: cloud-doc-processor
+        image: cloud-doc-processor:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
