@@ -1,4 +1,5 @@
 import socket
+
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -8,21 +9,24 @@ from django.shortcuts import get_object_or_404
 from .models import Document
 from .serializers import DocumentUploadSerializer
 from documents.services.processor import process_document
-from documents.services.background import run_in_background
 
 
 @api_view(['GET'])
 def health(request):
+    """
+    Health check endpoint used by Kubernetes readiness & liveness probes.
+    """
     return Response({
         "status": "UP",
         "pod": socket.gethostname()
     })
 
+
 @api_view(['POST'])
 def upload_document(request):
     """
     Uploads a document and stores metadata.
-    DOES NOT trigger processing.
+    Does NOT trigger processing.
     """
 
     uploaded_file = request.FILES.get('file')
@@ -36,7 +40,7 @@ def upload_document(request):
 
     # Validation rules
     allowed_extensions = ['.pdf', '.png', '.jpg', '.jpeg']
-    max_file_size = 5 * 1024 * 1024  # 5 MB
+    max_file_size = 5 * 1024 * 1024  # 5MB
 
     file_extension = uploaded_file.name.lower().split('.')[-1]
     file_extension = f".{file_extension}"
@@ -69,13 +73,12 @@ def upload_document(request):
 @api_view(['POST'])
 def process_document_view(request, document_id):
     """
-    Triggers background processing for an uploaded document.
+    Triggers background processing for a document.
     """
 
-    # Fetch document safely
     document = get_object_or_404(Document, id=document_id)
 
-    # Guard against duplicate processing
+    # Prevent duplicate processing
     if document.status in ['PROCESSING', 'PROCESSED']:
         return Response(
             {
@@ -85,12 +88,15 @@ def process_document_view(request, document_id):
             status=status.HTTP_200_OK
         )
 
-    # Mark as processing
+    # Update status before processing
     document.status = 'PROCESSING'
     document.save()
 
-    # Run processing in background
-    run_in_background(process_document, document.id)
+    # Trigger async processing
+    process_document(document.id)
+
+    # Refresh from DB after processing
+    document.refresh_from_db()
 
     return Response(
         {
@@ -104,8 +110,9 @@ def process_document_view(request, document_id):
 @api_view(['GET'])
 def document_status_view(request, document_id):
     """
-    Returns the current status of a document.
+    Returns current document status.
     """
+
     document = get_object_or_404(Document, id=document_id)
 
     return Response(

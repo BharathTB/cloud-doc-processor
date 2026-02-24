@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: cloud-doc-processor
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: cloud-doc-processor
@@ -13,8 +13,28 @@ spec:
         app: cloud-doc-processor
     spec:
       containers:
-      - name: cloud-doc-processor
-        image: cloud-doc-processor:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8000
+        - name: cloud-doc-processor
+          image: cloud-doc-processor:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+
+          readinessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
